@@ -25,9 +25,16 @@ LOG_REQUESTS=1 node server.js           # log every request with its cookie/sess
 | POST | `/login` | no | form: `csrf, username, password` → 302 `/dashboard` (or `/login?error=1`) |
 | POST | `/api/login` | no | form or JSON `username, password` → 200 / 401 (no CSRF) |
 | POST | `/logout` | – | destroys session, 302 `/login` (POST so link prefetching cannot log you out) |
-| GET | `/dashboard`, `/items` | yes | HTML pages; unauthenticated → 302 `/login` |
+| GET | `/dashboard` | yes | HTML page; unauthenticated → 302 `/login` |
+| GET | `/items` | yes | HTML table with **Edit / Delete** buttons, **Add item** form, `?q=` search, flash message via `?msg=` |
+| POST | `/items` | yes | add item: form `csrf, name, price, stock` → 302 `/items?msg=created`; 400 if name/price invalid |
+| GET | `/items/{id}/edit` | yes | edit form (404 if missing) |
+| POST | `/items/{id}` | yes | save edit: form `csrf, name, price, stock` → 302 `/items?msg=updated` |
+| POST | `/items/{id}/delete` | yes | delete: form `csrf` → 302 `/items?msg=deleted` |
 | GET | `/api/me` | yes | current user |
 | GET/POST | `/api/items` | yes | list (`?q=` filter) / create `{name, price, stock}` → 201 |
 | GET/PUT/DELETE | `/api/items/{id}` | yes | read / replace / delete; 404 if missing |
+
+The HTML item forms embed the session's CSRF token in a hidden `csrf` field; a missing/wrong token returns `403`. The row ids are in the markup (`id="item-<n>"`) for regex correlation.
 
 API endpoints return `401` JSON when there is no valid session.

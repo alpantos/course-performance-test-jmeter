@@ -139,10 +139,55 @@ const server = http.createServer(async (req, res) => {
 <p><a href="/items">Items</a></p>${logoutForm}`));
   }
 
+  // ---- HTML items UI (server-rendered forms; every form carries the session CSRF token) ----
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const MSGS = { created: 'Item created', updated: 'Item updated', deleted: 'Item deleted' };
+  const redirect = (loc) => { res.writeHead(302, { Location: loc }); res.end(); };
+  const fields = (i = {}) => `<label>Name <input name="name" id="name" value="${esc(i.name || '')}" required></label>
+<label>Price <input name="price" id="price" type="number" step="any" value="${esc(i.price ?? '')}" required></label>
+<label>Stock <input name="stock" id="stock" type="number" value="${esc(i.stock ?? 0)}"></label>`;
+  const csrfField = `<input type="hidden" name="csrf" value="${s.csrf}">`;
+  const validItem = (b) => b && b.name && String(b.name).trim() && b.price !== '' && !isNaN(Number(b.price));
+  const formError = (msg, back) => send(res, 400, page('Error', `<h1>Error</h1><p class="err" id="error">${esc(msg)}</p><p><a href="${back}">Back</a></p>`));
+
   if (path === '/items' && m === 'GET') {
-    const rows = items.map((i) => `<tr><td>${i.id}</td><td>${i.name}</td><td>${i.price}</td><td>${i.stock}</td></tr>`).join('');
-    return send(res, 200, page('Items', `<h1>Items</h1><table><tr><th>ID</th><th>Name</th><th>Price</th><th>Stock</th></tr>${rows}</table>
+    const q = (url.searchParams.get('q') || '').toLowerCase();
+    const list = items.filter((i) => i.name.toLowerCase().includes(q));
+    const rows = list.map((i) => `<tr class="item-row" id="item-${i.id}"><td class="id">${i.id}</td><td class="name">${esc(i.name)}</td><td>${i.price}</td><td>${i.stock}</td>
+<td><a class="edit" href="/items/${i.id}/edit">Edit</a>
+<form method="POST" action="/items/${i.id}/delete" style="display:inline">${csrfField}<button type="submit" class="delete">Delete</button></form></td></tr>`).join('\n');
+    const msg = MSGS[url.searchParams.get('msg')];
+    return send(res, 200, page('Items', `<h1>Items</h1>${msg ? `<p id="flash">${msg}</p>` : ''}
+<form method="GET" action="/items"><input name="q" value="${esc(url.searchParams.get('q') || '')}" placeholder="Search by name"><button type="submit">Search</button></form>
+<table><tr><th>ID</th><th>Name</th><th>Price</th><th>Stock</th><th>Actions</th></tr>${rows}</table>
+<h2>Add item</h2>
+<form method="POST" action="/items" id="add-form">${csrfField}${fields()}<button type="submit">Add</button></form>
 <p><a href="/dashboard">Back</a></p>${logoutForm}`));
+  }
+
+  const ui = path.match(/^\/items\/(\d+)\/(edit|delete)$/);
+  const uiUpdate = path.match(/^\/items\/(\d+)$/);
+  if ((path === '/items' && m === 'POST') || (ui && ((ui[2] === 'edit' && m === 'GET') || (ui[2] === 'delete' && m === 'POST'))) || (uiUpdate && m === 'POST')) {
+    const id = Number((ui || uiUpdate || [])[1]);
+    const idx = items.findIndex((i) => i.id === id);
+    if (m === 'GET') { // edit form
+      if (idx < 0) return send(res, 404, page('Not found', '<h1>Item not found</h1><p><a href="/items">Back</a></p>'));
+      return send(res, 200, page('Edit item', `<h1>Edit item ${id}</h1>
+<form method="POST" action="/items/${id}" id="edit-form">${csrfField}${fields(items[idx])}<button type="submit">Save</button></form>
+<p><a href="/items">Cancel</a></p>`));
+    }
+    const b = await parseBody(req);
+    if (!b || b.csrf !== s.csrf) return send(res, 403, page('Forbidden', '<h1>Forbidden</h1><p class="err" id="error">Invalid CSRF token</p>'));
+    if (path === '/items') { // create
+      if (!validItem(b)) return formError('Name and numeric price are required', '/items');
+      items.push({ id: nextId++, name: String(b.name).trim(), price: Number(b.price), stock: Number(b.stock) || 0 });
+      return redirect('/items?msg=created');
+    }
+    if (idx < 0) return send(res, 404, page('Not found', '<h1>Item not found</h1><p><a href="/items">Back</a></p>'));
+    if (ui) { items.splice(idx, 1); return redirect('/items?msg=deleted'); } // delete
+    if (!validItem(b)) return formError('Name and numeric price are required', `/items/${id}/edit`); // update
+    items[idx] = { id, name: String(b.name).trim(), price: Number(b.price), stock: Number(b.stock) || 0 };
+    return redirect('/items?msg=updated');
   }
 
   if (path === '/api/me' && m === 'GET') return json(res, 200, { user: s.user });

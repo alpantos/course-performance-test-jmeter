@@ -13,8 +13,9 @@ Run: start the app, then `./run.sh` (or open the plan in the GUI and set `-Jdata
 | Logic controller | If Controller – admin also loads the HTML items page |
 | Timers | Uniform Random Timer 300–800 ms |
 | Assertions | Response code/body/headers, JSON Path with expected values |
-| Negative testing | Thread group 2: no cookie → 401, bad password → 401, bad CSRF → error page |
-| Parameters | `-Jthreads -Jrampup -Jloops -Jneg_threads -Jhost -Jport -Jdatadir` |
+| Web UI CRUD (TG3) | Browser-style flow through the HTML forms: Add → Search (extract `uiId` with regex) → open Edit form → Save → Verify → Delete → confirm 404; CSRF token extracted from the items page; unique name via User Parameters (`${__UUID}`) |
+| Negative testing | Thread group 2 (plus TX05 in TG3: invalid item → 400, bad CSRF → 403): no cookie → 401, bad password → 401, bad CSRF → error page |
+| Parameters | `-Jthreads -Jrampup -Jloops -Jui_threads -Jui_rampup -Jui_loops -Jneg_threads -Jhost -Jport -Jdatadir` |
 | Listeners | Errors-only Results Tree, Summary, Aggregate (+ HTML report via `run.sh`) |
 
 ## Exercises
