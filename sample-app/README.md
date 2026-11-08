@@ -38,3 +38,6 @@ LOG_REQUESTS=1 node server.js           # log every request with its cookie/sess
 The HTML item forms embed the session's CSRF token in a hidden `csrf` field; a missing/wrong token returns `403`. The row ids are in the markup (`id="item-<n>"`) for regex correlation.
 
 API endpoints return `401` JSON when there is no valid session.
+
+## Look & feel
+Alpantos-branded dark theme (navy surfaces, teal accent, logo/favicon) served from `public/` as static files: `/static/app.css`, `/static/logo.svg`, `/favicon.svg` (no authentication needed – handy for "embedded resources" exercises). Markup hooks used by the JMeter plans (`id="item-<n>"`, hidden `csrf` field, flash messages) are unchanged.
