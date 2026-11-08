@@ -13,3 +13,9 @@ cd sample-app && node server.js        # http://localhost:3000  (Node 18+, no np
 cd Day1 && ./run.sh                    # headless run + HTML report in Day1/report
 jmeter -t Day1/basic-test-plan.jmx     # or open in the GUI
 ```
+
+## Regression check
+Run after **any** change to the app or a test plan:
+```bash
+./validate.sh    # starts the app on port 3999, runs all plans headless, fails on any failed sample/assertion
+```

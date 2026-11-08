@@ -56,11 +56,27 @@ async function parseBody(req) {
   } catch { return null; }
 }
 
-const page = (title, body) => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
-<style>body{font-family:sans-serif;max-width:640px;margin:40px auto}input{margin:4px 0;padding:6px}
-table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 10px}.err{color:#b00}</style></head><body>${body}</body></html>`;
+const fs = require('fs');
+const nodePath = require('path');
+const STATIC = { '/static/app.css': ['app.css', 'text/css; charset=utf-8'], '/static/logo.svg': ['logo.svg', 'image/svg+xml'], '/favicon.svg': ['logo.svg', 'image/svg+xml'] };
 
-const logoutForm = '<form method="POST" action="/logout"><button type="submit">Logout</button></form>';
+const escHtml = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const logoutForm = '<form method="POST" action="/logout"><button type="submit" class="ghost">Logout</button></form>';
+
+// ctx: { user, active } -> full app shell; no user -> centred auth layout
+const page = (title, body, ctx = {}) => `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title} · Alpantos Performance Lab</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css"></head>
+<body class="${ctx.user ? 'app' : 'auth'}">
+${ctx.user ? `<header class="topbar"><div class="topbar-inner">
+<a class="brand" href="/dashboard"><img src="/static/logo.svg" alt=""><span>Alpantos<small>Performance Lab</small></span></a>
+<nav class="nav"><a href="/dashboard"${ctx.active === 'dashboard' ? ' class="active"' : ''}>Dashboard</a><a href="/items"${ctx.active === 'items' ? ' class="active"' : ''}>Items</a></nav>
+<div class="user-chip"><span class="avatar">${escHtml(ctx.user[0])}</span><span>${escHtml(ctx.user)}</span>${logoutForm}</div></div></header>` : ''}
+<main>${body}</main>
+<footer class="footer">Alpantos JMeter course · local training app – not for production</footer>
+</body></html>`;
 
 function loginPage(req, res, err) {
   const cur = getSession(req);
@@ -69,13 +85,15 @@ function loginPage(req, res, err) {
     return res.end();
   }
   const s = cur || newSession(res, {}); // anonymous session carrying the CSRF token (reused if present)
-  send(res, 200, page('Login', `<h1>Login</h1>${err ? `<p class="err">${err}</p>` : ''}
+  send(res, 200, page('Login', `<div class="card auth-card">
+<div class="auth-logo"><img src="/static/logo.svg" alt="Alpantos"><div class="eyebrow">Performance Lab</div></div>
+<h1>Login</h1>${err ? `<p class="err">${err}</p>` : ''}
 <form method="POST" action="/login">
 <input type="hidden" name="csrf" value="${s.csrf}">
-<label>Username <input name="username" id="username"></label><br>
-<label>Password <input name="password" id="password" type="password"></label><br>
-<button type="submit">Login</button></form>
-<p><small>Try admin / password123</small></p>`));
+<label>Username <input name="username" id="username" autocomplete="username" autofocus></label>
+<label>Password <input name="password" id="password" type="password" autocomplete="current-password"></label>
+<button type="submit">Sign in</button></form>
+<p class="hint">Demo credentials: <code>admin</code> / <code>password123</code></p></div>`));
 }
 
 const server = http.createServer(async (req, res) => {
@@ -90,6 +108,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---- public ----
+  if (STATIC[path] && m === 'GET') {
+    const [file, type] = STATIC[path];
+    return send(res, 200, fs.readFileSync(nodePath.join(__dirname, 'public', file)), type, { 'Cache-Control': 'public, max-age=300' });
+  }
+
   if (path === '/health') return json(res, 200, { status: 'ok' });
 
   if (path === '/' ) {
@@ -135,12 +158,21 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (path === '/dashboard' && m === 'GET') {
-    return send(res, 200, page('Dashboard', `<h1>Dashboard</h1><p id="welcome">Welcome, ${s.user}!</p>
-<p><a href="/items">Items</a></p>${logoutForm}`));
+    const units = items.reduce((n, i) => n + i.stock, 0);
+    const value = items.reduce((n, i) => n + i.stock * i.price, 0);
+    return send(res, 200, page('Dashboard', `<div class="card hero"><h1>Dashboard</h1>
+<p id="welcome" class="muted">Welcome, ${escHtml(s.user)}!</p>
+<div class="actions"><a class="btn primary" href="/items">Manage items</a></div></div>
+<div class="stats">
+<div class="stat"><div class="label">Items</div><div class="value accent">${items.length}</div></div>
+<div class="stat"><div class="label">Units in stock</div><div class="value">${units.toLocaleString('en-US')}</div></div>
+<div class="stat"><div class="label">Inventory value</div><div class="value">$${value.toLocaleString('en-US')}</div></div>
+<div class="stat"><div class="label">Active sessions</div><div class="value">${[...sessions.values()].filter((x) => x.user).length}</div></div></div>`, { user: s.user, active: 'dashboard' }));
   }
 
   // ---- HTML items UI (server-rendered forms; every form carries the session CSRF token) ----
-  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const esc = escHtml;
+  const ctx = (active) => ({ user: s.user, active });
   const MSGS = { created: 'Item created', updated: 'Item updated', deleted: 'Item deleted' };
   const redirect = (loc) => { res.writeHead(302, { Location: loc }); res.end(); };
   const fields = (i = {}) => `<label>Name <input name="name" id="name" value="${esc(i.name || '')}" required></label>
@@ -148,21 +180,24 @@ const server = http.createServer(async (req, res) => {
 <label>Stock <input name="stock" id="stock" type="number" value="${esc(i.stock ?? 0)}"></label>`;
   const csrfField = `<input type="hidden" name="csrf" value="${s.csrf}">`;
   const validItem = (b) => b && b.name && String(b.name).trim() && b.price !== '' && !isNaN(Number(b.price));
-  const formError = (msg, back) => send(res, 400, page('Error', `<h1>Error</h1><p class="err" id="error">${esc(msg)}</p><p><a href="${back}">Back</a></p>`));
+  const formError = (msg, back) => send(res, 400, page('Error', `<div class="card"><h1>Error</h1><p class="err" id="error">${esc(msg)}</p><a class="btn" href="${back}">Back</a></div>`, ctx('items')));
+  const notFound = () => send(res, 404, page('Not found', '<div class="card"><h1>Item not found</h1><a class="btn" href="/items">Back to items</a></div>', ctx('items')));
 
   if (path === '/items' && m === 'GET') {
     const q = (url.searchParams.get('q') || '').toLowerCase();
     const list = items.filter((i) => i.name.toLowerCase().includes(q));
     const rows = list.map((i) => `<tr class="item-row" id="item-${i.id}"><td class="id">${i.id}</td><td class="name">${esc(i.name)}</td><td>${i.price}</td><td>${i.stock}</td>
 <td><a class="edit" href="/items/${i.id}/edit">Edit</a>
-<form method="POST" action="/items/${i.id}/delete" style="display:inline">${csrfField}<button type="submit" class="delete">Delete</button></form></td></tr>`).join('\n');
+<form method="POST" action="/items/${i.id}/delete">${csrfField}<button type="submit" class="delete">Delete</button></form></td></tr>`).join('\n');
     const msg = MSGS[url.searchParams.get('msg')];
-    return send(res, 200, page('Items', `<h1>Items</h1>${msg ? `<p id="flash">${msg}</p>` : ''}
-<form method="GET" action="/items"><input name="q" value="${esc(url.searchParams.get('q') || '')}" placeholder="Search by name"><button type="submit">Search</button></form>
-<table><tr><th>ID</th><th>Name</th><th>Price</th><th>Stock</th><th>Actions</th></tr>${rows}</table>
-<h2>Add item</h2>
-<form method="POST" action="/items" id="add-form">${csrfField}${fields()}<button type="submit">Add</button></form>
-<p><a href="/dashboard">Back</a></p>${logoutForm}`));
+    const qv = url.searchParams.get('q') || '';
+    return send(res, 200, page('Items', `<div class="page-head"><div><h1>Items</h1><p class="muted">${list.length} item${list.length === 1 ? '' : 's'}${qv ? ` matching “${esc(qv)}”` : ''}</p></div></div>
+${msg ? `<p id="flash" class="flash">${msg}</p>` : ''}
+<div class="card flush"><div class="card-head"><h2>Inventory</h2>
+<form method="GET" action="/items" class="search"><input name="q" value="${esc(qv)}" placeholder="Search by name"><button type="submit">Search</button></form></div>
+<table><thead><tr><th>ID</th><th>Name</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>${list.length ? '' : '<div class="empty">No items found</div>'}</div>
+<div class="card"><h2>Add item</h2>
+<form method="POST" action="/items" id="add-form" class="form-grid">${csrfField}${fields()}<button type="submit">Add</button></form></div>`, ctx('items')));
   }
 
   const ui = path.match(/^\/items\/(\d+)\/(edit|delete)$/);
@@ -171,19 +206,19 @@ const server = http.createServer(async (req, res) => {
     const id = Number((ui || uiUpdate || [])[1]);
     const idx = items.findIndex((i) => i.id === id);
     if (m === 'GET') { // edit form
-      if (idx < 0) return send(res, 404, page('Not found', '<h1>Item not found</h1><p><a href="/items">Back</a></p>'));
-      return send(res, 200, page('Edit item', `<h1>Edit item ${id}</h1>
-<form method="POST" action="/items/${id}" id="edit-form">${csrfField}${fields(items[idx])}<button type="submit">Save</button></form>
-<p><a href="/items">Cancel</a></p>`));
+      if (idx < 0) return notFound();
+      return send(res, 200, page('Edit item', `<div class="card"><h1>Edit item ${id}</h1>
+<form method="POST" action="/items/${id}" id="edit-form" class="form-grid">${csrfField}${fields(items[idx])}<button type="submit">Save</button></form>
+<p><a href="/items">Cancel</a></p></div>`, ctx('items')));
     }
     const b = await parseBody(req);
-    if (!b || b.csrf !== s.csrf) return send(res, 403, page('Forbidden', '<h1>Forbidden</h1><p class="err" id="error">Invalid CSRF token</p>'));
+    if (!b || b.csrf !== s.csrf) return send(res, 403, page('Forbidden', '<div class="card"><h1>Forbidden</h1><p class="err" id="error">Invalid CSRF token</p></div>', ctx('items')));
     if (path === '/items') { // create
       if (!validItem(b)) return formError('Name and numeric price are required', '/items');
       items.push({ id: nextId++, name: String(b.name).trim(), price: Number(b.price), stock: Number(b.stock) || 0 });
       return redirect('/items?msg=created');
     }
-    if (idx < 0) return send(res, 404, page('Not found', '<h1>Item not found</h1><p><a href="/items">Back</a></p>'));
+    if (idx < 0) return notFound();
     if (ui) { items.splice(idx, 1); return redirect('/items?msg=deleted'); } // delete
     if (!validItem(b)) return formError('Name and numeric price are required', `/items/${id}/edit`); // update
     items[idx] = { id, name: String(b.name).trim(), price: Number(b.price), stock: Number(b.stock) || 0 };
