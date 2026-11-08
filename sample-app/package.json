@@ -1,0 +1,1 @@
+{ "name": "jmeter-course-sample-app", "version": "1.0.0", "private": true, "description": "Local-only sample app for the JMeter course", "scripts": { "start": "node server.js" } }

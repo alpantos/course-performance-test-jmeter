@@ -1,0 +1,6 @@
+.DS_Store
+node_modules/
+jmeter.log
+**/results/*
+!**/results/.gitkeep
+**/report/
