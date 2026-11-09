@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Regression check: starts the sample app on a spare port, runs every Day plan headless
-# with small load, and fails if ANY sample or assertion fails.   Usage: ./validate.sh
+# with a small load, and fails if ANY sample or assertion fails.   Usage: ./validate.sh
+# Plans that are *meant* to fail (exercises) are run with run_expect_fail and must fail.
 set -uo pipefail
 cd "$(dirname "$0")"
 PORT=${VALIDATE_PORT:-3999}
@@ -12,20 +13,38 @@ for _ in $(seq 20); do curl -sf "localhost:$PORT/health" >/dev/null && break; sl
 curl -sf "localhost:$PORT/health" >/dev/null || { echo "App failed to start"; cat "$OUT/app.log"; exit 1; }
 
 fail=0
-run() { # plan, extra args...
-  local plan=$1; shift
+# mode: pass | fail ; plan ; extra jmeter args
+run() {
+  local mode=$1 plan=$2; shift 2
   local jtl="$OUT/$(basename "$plan").jtl"
-  jmeter -n -t "$plan" -l "$jtl" -Jport=$PORT "$@" >"$OUT/jmeter.log" 2>&1 || { echo "FAIL $plan: jmeter error"; tail -20 "$OUT/jmeter.log"; fail=1; return; }
-  python3 - "$plan" "$jtl" <<'PY' || fail=1
+  jmeter -n -t "$plan" -l "$jtl" -Jport=$PORT -Jthink=50 -Jthink_dev=20 "$@" >"$OUT/jmeter.log" 2>&1 || { echo "FAIL $plan: jmeter error"; tail -20 "$OUT/jmeter.log"; fail=1; return; }
+  python3 - "$mode" "$plan" "$jtl" <<'PY' || fail=1
 import csv, sys
-rows = list(csv.DictReader(open(sys.argv[2])))
+mode, plan, jtl = sys.argv[1:4]
+rows = list(csv.DictReader(open(jtl)))
 bad = [(r['label'], r['responseCode'], r['failureMessage']) for r in rows if r['success'] != 'true']
-print(f"{'FAIL' if bad or not rows else 'PASS'} {sys.argv[1]}: {len(rows)} samples, {len(bad)} failures")
-for b in bad[:10]: print("   ", b)
-sys.exit(1 if bad or not rows else 0)
+good = bool(rows) and (not bad if mode == 'pass' else bool(bad))
+tag = 'PASS' if good else 'FAIL'
+note = '' if mode == 'pass' else ' (expected to fail: exercise)'
+print(f"{tag} {plan}: {len(rows)} samples, {len(bad)} failures{note}")
+if not good:
+    for b in bad[:10]: print("   ", b)
+sys.exit(0 if good else 1)
 PY
 }
-run Day1/basic-test-plan.jmx -Jthreads=2 -Jloops=1
-run Day2/advanced-crud-test-plan.jmx -Jdatadir=Day2 -Jthreads=3 -Jloops=1 -Jui_threads=3 -Jui_loops=1
+
+run pass Day1/basic-test-plan.jmx -Jthreads=2 -Jloops=1
+# Day 2 - every plan in test-plans/ (small load so the whole suite stays quick)
+run fail Day2/test-plans/00-recorded-script-exercise.jmx
+run pass Day2/test-plans/00b-recorded-script-solution.jmx
+run pass Day2/test-plans/01-timers.jmx
+run pass Day2/test-plans/02-preprocessors-postprocessors.jmx
+run pass Day2/test-plans/03-controllers.jmx
+run pass Day2/test-plans/04-config-elements.jmx
+run pass Day2/test-plans/05-assertions.jmx
+run pass Day2/test-plans/06-api-soap-scripting.jmx
+run pass Day2/test-plans/07-advanced-crud-test-plan.jmx -Jthreads=3 -Jloops=1 -Jui_threads=3 -Jui_loops=1
+run pass Day2/test-plans/08-load-scenario.jmx -Jusers=3 -Jrampup=2 -Jduration=10 -Jflaky_rate=0
+run pass Day2/test-plans/09-stepping-load-profile.jmx -Jstep_s=4 -Jrate1=1 -Jrate2=2 -Jrate3=3 -Jdrain_s=5
 # Add new plans here (Day3, ...)
 exit $fail

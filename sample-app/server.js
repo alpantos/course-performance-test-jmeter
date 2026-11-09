@@ -21,7 +21,7 @@ const parseCookies = (h = '') =>
   Object.fromEntries(h.split(';').map((c) => c.trim().split('=')).filter((p) => p[0]).map(([k, ...v]) => [k, v.join('=')]));
 
 function getSession(req) {
-  const id = parseCookies(req.headers.cookie)[COOKIE];
+  const id = parseCookies(req.headers.cookie)[COOKIE] || new URL(req.url, 'http://x').searchParams.get('sid');
   const s = id && sessions.get(id);
   if (!s) return null;
   if (Date.now() - s.lastSeen > SESSION_TTL_MS) { sessions.delete(id); return null; }
@@ -110,7 +110,27 @@ const server = http.createServer(async (req, res) => {
   // ---- public ----
   if (STATIC[path] && m === 'GET') {
     const [file, type] = STATIC[path];
-    return send(res, 200, fs.readFileSync(nodePath.join(__dirname, 'public', file)), type, { 'Cache-Control': 'public, max-age=300' });
+    const full = nodePath.join(__dirname, 'public', file);
+    const body = fs.readFileSync(full);
+    const etag = '"' + crypto.createHash('md5').update(body).digest('hex') + '"';
+    const lastModified = fs.statSync(full).mtime.toUTCString();
+    if (req.headers['if-none-match'] === etag) { res.writeHead(304, { ETag: etag }); return res.end(); }
+    return send(res, 200, body, type, { ETag: etag, 'Last-Modified': lastModified, 'Cache-Control': 'no-cache' });
+  }
+
+  if (path === '/soap/calculator' && m === 'POST') {
+    const xml = await readBody(req);
+    const ns = 'http://tempuri.org/';
+    const env = (inner, code = 200) => send(res, code, `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><soap:Body>${inner}</soap:Body></soap:Envelope>`, 'text/xml; charset=utf-8');
+    if (!(req.headers['content-type'] || '').includes('xml')) return env('<soap:Fault><faultcode>soap:Client</faultcode><faultstring>Content-Type must be text/xml</faultstring></soap:Fault>', 415);
+    const op = (xml.match(/<(?:\w+:)?(Add|Subtract|Multiply|Divide)[\s>]/) || [])[1];
+    const num = (n) => Number((xml.match(new RegExp(`<(?:\\w+:)?${n}>\\s*(-?\\d+)\\s*<`)) || [])[1]);
+    const a = num('intA'), b = num('intB');
+    if (!op || Number.isNaN(a) || Number.isNaN(b)) return env('<soap:Fault><faultcode>soap:Client</faultcode><faultstring>Unknown operation or missing intA/intB</faultstring></soap:Fault>', 500);
+    if (op === 'Divide' && b === 0) return env('<soap:Fault><faultcode>soap:Server</faultcode><faultstring>Divide by zero</faultstring></soap:Fault>', 500);
+    const r = { Add: a + b, Subtract: a - b, Multiply: a * b, Divide: Math.trunc(a / b) }[op];
+    return env(`<${op}Response xmlns="${ns}"><${op}Result>${r}</${op}Result></${op}Response>`);
   }
 
   if (path === '/health') return json(res, 200, { status: 'ok' });
@@ -138,8 +158,9 @@ const server = http.createServer(async (req, res) => {
     const b = await parseBody(req);
     if (!b || USERS[b.username] !== b.password) return json(res, 401, { error: 'Invalid credentials' });
     if (s) sessions.delete(s.id);
-    newSession(res, { user: b.username });
-    return json(res, 200, { message: 'Logged in', user: b.username });
+    const ns = newSession(res, { user: b.username });
+    const sid = res.getHeader('Set-Cookie').match(/SESSIONID=([a-f0-9]+)/)[1];
+    return json(res, 200, { message: 'Logged in', user: b.username, next: `/api/me?sid=${sid}` });
   }
 
   if (path === '/logout' && m === 'POST') {
@@ -225,7 +246,25 @@ ${msg ? `<p id="flash" class="flash">${msg}</p>` : ''}
     return redirect('/items?msg=updated');
   }
 
-  if (path === '/api/me' && m === 'GET') return json(res, 200, { user: s.user });
+  if (path === '/api/me' && m === 'GET') return json(res, 200, { user: s.user, next: `/api/items?sid=${s.id}` });
+
+  // ---- endpoints that misbehave on purpose, for the "analyse the results" part of the course ----
+  const clamp = (v, max) => Math.min(Math.max(Number(v) || 0, 0), max);
+  if (path === '/api/slow' && m === 'GET') { // simulated slow dependency (I/O wait, no CPU)
+    const ms = clamp(url.searchParams.get('ms') || 500, 5000);
+    await new Promise((r) => setTimeout(r, ms));
+    return json(res, 200, { waitedMs: ms });
+  }
+  if (path === '/api/cpu' && m === 'GET') { // burns CPU on the single Node thread -> queueing under load
+    const ms = clamp(url.searchParams.get('ms') || 50, 1000);
+    const end = Date.now() + ms;
+    while (Date.now() < end) { /* busy loop */ }
+    return json(res, 200, { burnedMs: ms });
+  }
+  if (path === '/api/flaky' && m === 'GET') { // random failures, default 20%
+    const rate = clamp(url.searchParams.get('rate') ?? 20, 100);
+    return Math.random() * 100 < rate ? json(res, 500, { error: 'Simulated failure' }) : json(res, 200, { ok: true });
+  }
 
   if (path === '/api/items' && m === 'GET') {
     const q = (url.searchParams.get('q') || '').toLowerCase();
