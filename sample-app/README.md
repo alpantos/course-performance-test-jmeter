@@ -37,6 +37,16 @@ LOG_REQUESTS=1 node server.js           # log every request with its cookie/sess
 
 The HTML item forms embed the session's CSRF token in a hidden `csrf` field; a missing/wrong token returns `403`. The row ids are in the markup (`id="item-<n>"`) for regex correlation.
 
+## Endpoints added for Day 2
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | `/soap/calculator` | no | SOAP 1.1 calculator (`Add/Subtract/Multiply/Divide`, `intA`, `intB`); `Content-Type: text/xml`; faults return 500 (e.g. divide by zero) |
+| GET | `/api/slow?ms=200` | yes | waits `ms` (max 5000) – simulates a slow dependency (I/O-bound) |
+| GET | `/api/cpu?ms=30` | yes | burns CPU for `ms` (max 1000) on the single Node thread (CPU-bound) |
+| GET | `/api/flaky?rate=20` | yes | fails with 500 for `rate` % of calls |
+| GET | `/static/*`, `/favicon.svg` | no | ETag + `Last-Modified`, answers `If-None-Match` with 304 (HTTP Cache Manager demo) |
+| any | `?sid=<session id>` | – | the session id is also accepted in the URL; `/api/login` and `/api/me` return a `next` link containing it (HTTP URL Re-writing Modifier demo) |
+
 API endpoints return `401` JSON when there is no valid session.
 
 ## Look & feel

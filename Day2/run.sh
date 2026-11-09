@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# Headless (non-GUI) run + HTML dashboard report. Start the app first: (cd ../sample-app && node server.js)
-# Override with e.g.:  ./run.sh -Jthreads=50 -Jhost=localhost -Jport=3000
+# Run one Day 2 plan headless and build the HTML dashboard report.
+#   ./run.sh 08                       # plan whose file name starts with "08"
+#   ./run.sh 08-load-scenario -Jusers=50 -Jduration=180
+#   ./run.sh 01 -Jthink=1000 -Jthink_dev=300      # slide values for the Gaussian timer
+# Start the app first:  (cd ../sample-app && node server.js)
 set -euo pipefail
 cd "$(dirname "$0")"
-rm -rf report results/run.jtl
-jmeter -n -t advanced-crud-test-plan.jmx -l results/run.jtl -e -o report -Jthreads=10 -Jloops=3 -Jdatadir=. "$@"
-echo "Report: $(pwd)/report/index.html"
+[ $# -ge 1 ] || { echo "usage: $0 <plan-prefix> [jmeter -J options]"; ls test-plans; exit 1; }
+prefix=$1; shift
+plan=$(ls test-plans/"$prefix"*.jmx 2>/dev/null | head -1 || true)
+[ -n "$plan" ] || { echo "no plan matches '$prefix'"; ls test-plans; exit 1; }
+name=$(basename "$plan" .jmx)
+mkdir -p results
+rm -f "results/$name.jtl"
+rm -rf "results/report-$name"
+jmeter -n -t "$plan" -l "results/$name.jtl" -e -o "results/report-$name" "$@"
+echo "Report: $(pwd)/results/report-$name/index.html"

@@ -1,0 +1,9 @@
+operation,intA,intB,expected
+Add,7,5,12
+Subtract,20,8,12
+Multiply,6,7,42
+Divide,100,4,25
+Add,-3,3,0
+Multiply,12,12,144
+Divide,9,2,4
+Subtract,5,10,-5
