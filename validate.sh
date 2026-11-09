@@ -46,5 +46,6 @@ run pass Day2/test-plans/06-api-soap-scripting.jmx
 run pass Day2/test-plans/07-advanced-crud-test-plan.jmx -Jthreads=3 -Jloops=1 -Jui_threads=3 -Jui_loops=1
 run pass Day2/test-plans/08-load-scenario.jmx -Jusers=3 -Jrampup=2 -Jduration=10 -Jflaky_rate=0
 run pass Day2/test-plans/09-stepping-load-profile.jmx -Jstep_s=4 -Jrate1=1 -Jrate2=2 -Jrate3=3 -Jdrain_s=5
+run pass Day2/test-plans/10-populate-items.jmx
 # Add new plans here (Day3, ...)
 exit $fail
