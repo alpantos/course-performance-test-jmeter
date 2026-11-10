@@ -4,7 +4,7 @@
 |---|---|
 | [`sample-app/`](sample-app) | Minimal Node.js web app (login, session cookie, items CRUD) used as the system under test. **Local use only.** |
 | [`Day1/`](Day1) | Basics: installation, GUI walkthrough, first test plan (thread group, HTTP requests, timers, assertions, listeners). |
-| [`Day2/`](Day2) | Advanced (matches the Day 2 deck): 11 test plans (recording exercise, timers incl. Gaussian, pre/post-processors, controllers, config elements, assertions, SOAP, CRUD, mixed-workload load scenario, stepping load), CSV data, monitoring script, report template and a **[presenter's prep guide](Day2/PREP-GUIDE.md)**. |
+| [`Day2/`](Day2) | Advanced: 11 test plans (recording exercise, timers incl. Gaussian, pre/post-processors, controllers, config elements, assertions, SOAP, CRUD, mixed-workload load scenario, stepping load), CSV data, monitoring script, and report template. |
 | [`Day3/`](Day3) | Reserved for Day 3 material. |
 
 ## Quick start

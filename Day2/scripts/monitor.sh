@@ -3,7 +3,7 @@
 # Samples CPU % and memory (RSS) of the sample app every 2 s into a CSV you can plot next to the JMeter report.
 #   ./monitor.sh            # watches the process listening on :3000 until Ctrl-C
 #   PORT=3999 INTERVAL=1 ./monitor.sh
-# In production you would use Grafana/Prometheus, CloudWatch, AppDynamics ... (slides 87-90).
+# In production you would use Grafana/Prometheus, CloudWatch, AppDynamics ....
 set -euo pipefail
 PORT=${PORT:-3000}
 INTERVAL=${INTERVAL:-2}

@@ -2,7 +2,7 @@
 # Run one Day 2 plan headless and build the HTML dashboard report.
 #   ./run.sh 08                       # plan whose file name starts with "08"
 #   ./run.sh 08-load-scenario -Jusers=50 -Jduration=180
-#   ./run.sh 01 -Jthink=1000 -Jthink_dev=300      # slide values for the Gaussian timer
+#   ./run.sh 01 -Jthink=1000 -Jthink_dev=300
 # Start the app first:  (cd ../sample-app && node server.js)
 set -euo pipefail
 cd "$(dirname "$0")"

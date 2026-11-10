@@ -1,10 +1,10 @@
 # Performance Test Report – <application> – <date>
 
-*(Structure from the Day 2 deck, slides 76–92. Delete the hints in italics.)*
+*(Structure for the Day 2 final report. Delete the hints in italics.)*
 
 ## 1. Introduction
 - **Objective:** *what question does this test answer? e.g. "Can the system serve 500 concurrent users with p90 < 2 s?"*
-- **Test environment:** *hardware, OS, app/DB versions, how it differs from production (slides 102–106)*
+- **Test environment:** *hardware, OS, app/DB versions, how it differs from production*
 - **Scope:** *which journeys / APIs were tested – and what was deliberately left out*
 
 ## 2. Test plan summary
@@ -26,8 +26,8 @@
 
 ## 5. Bottleneck identification
 - **Slow transactions:** …
-- **Error analysis:** *status codes, assertion failures, when they started (slide 80)*
-- **Server-side:** *the resource that saturated first, and at how many users (slides 82–86)*
+- **Error analysis:** *status codes, assertion failures, when they started*
+- **Server-side:** *the resource that saturated first, and at how many users*
 
 ## 6. Conclusions
 - **Did it meet the requirements?** …
